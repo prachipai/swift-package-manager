@@ -53,13 +53,19 @@ public class SwiftPackageTool: SwiftTool<PackageToolOptions> {
             let cwd = localFileSystem.currentWorkingDirectory!
             
             let packageName = options.packageName ?? cwd.basename
-            let initPackage = try InitPackage(
-                name: packageName, destinationPath: cwd, packageType: options.initMode)
-            initPackage.progressReporter = { message in
-                print(message)
+            
+            if let sourcePath = options.customTemplatePath {
+                let initPackage = try CustomTemplate(name: packageName, sourcePath: sourcePath, destinationPath: cwd.asString)
+                try initPackage.copy()
+            } else {
+                let initPackage = try InitPackage(
+                    name: packageName, destinationPath: cwd, packageType: options.initMode)
+                initPackage.progressReporter = { message in
+                    print(message)
+                }
+                try initPackage.writePackageStructure()
             }
-            try initPackage.writePackageStructure()
-
+            
         case .clean:
             try getActiveWorkspace().clean(with: diagnostics)
 
@@ -300,7 +306,11 @@ public class SwiftPackageTool: SwiftTool<PackageToolOptions> {
                 option: "--type", kind: InitPackage.PackageType.self,
                 usage: "empty|library|executable|system-module"),
             to: { $0.initMode = $1 })
-        
+        binder.bind(
+            option: initPackageParser.add(
+                option: "--custom-template", shortName: "-c", kind: String.self,
+                usage: "Provide path to custom template"),
+            to: { $0.customTemplatePath = $1 })
         binder.bind(
             option: initPackageParser.add(
                 option: "--name", kind: String.self,
@@ -435,6 +445,8 @@ public class PackageToolOptions: ToolOptions {
     var initMode: InitPackage.PackageType = .library
     
     var packageName: String?
+    
+    var customTemplatePath: String?
 
     var inputPath: AbsolutePath?
     var showDepsMode: ShowDependenciesMode = .text
